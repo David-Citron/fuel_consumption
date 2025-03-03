@@ -1,125 +1,300 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+
+TimeOfDay selectedTime = TimeOfDay.now();
+
+class Data {
+  static int idCounter = 0;
+
+  final int id = idCounter++;
+  final DateTime dateTime;
+  final int fuelAmount;
+  final double tachometerStart;
+  final double tachometerEnd;
+  final int pricePerLitre;
+  final String notes;
+
+  Data({required this.dateTime, required this.fuelAmount, required this.tachometerStart,
+    required this.tachometerEnd, required this.pricePerLitre, required this.notes});
+}
+
+class DataStorage {
+  static List<Data> dataList = [];
+
+  static void add(Data data) {
+    dataList.add(data);
+  }
+
+  static List<Data> getAll() {
+    return dataList;
+  }
+
+  static Data? findByID(int id) {
+    return dataList.firstWhere(
+          (data) => data.id == id,
+      orElse: () => Data(dateTime: DateTime.now(), fuelAmount: 0, pricePerLitre: 0, tachometerStart: 0.0, tachometerEnd: 0.0, notes: ""),
+    );
+  }
+
+  static void removeById(int id) {
+    dataList.removeWhere((data) => data.id == id);
+  }
+}
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: HomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomePageState extends State<HomePage> {
+  final TextEditingController tachometerStart = TextEditingController();
+  final TextEditingController tachometerEnd = TextEditingController();
+  final TextEditingController fuelAmount = TextEditingController();
+  final TextEditingController pricePerLitre = TextEditingController();
+  final TextEditingController notes = TextEditingController();
 
-  void _incrementCounter() {
+  final formKey = GlobalKey<FormState>();
+
+  void submitForm() {
+    if (formKey.currentState?.validate() ?? false) {
+
+      DataStorage.add(Data(dateTime: _DatePickerState.selectedDate ?? DateTime.now(),
+          fuelAmount: int.tryParse(fuelAmount.text) ?? 0,
+          tachometerStart: double.tryParse(tachometerStart.text) ?? 0.0,
+          tachometerEnd: double.tryParse(tachometerEnd.text) ?? 0.0,
+          pricePerLitre: int.tryParse(pricePerLitre.text) ?? 0,
+          notes: notes.text));
+
+      // Clear the input fields
+      tachometerStart.clear();
+      tachometerEnd.clear();
+      fuelAmount.clear();
+      pricePerLitre.clear();
+      notes.clear();
+
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color(0xFFFAE9E6),
+      appBar: AppBar(title: Text('Fuel Consumption Calculator', style: TextStyle(color: Color(0xFFFFFFFF))), centerTitle: true, backgroundColor: Color(0xFFEC6461),),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: MyForm(
+              formKey: formKey,
+              vehicleTachometerStart: tachometerStart,
+              vehicleTachometerEnd: tachometerEnd,
+              fuelAmount: fuelAmount,
+              pricePerLitre: pricePerLitre,
+              notes: notes,
+              submitForm: submitForm,
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: DataStorage.getAll().length,
+              itemBuilder: (context, index) {
+                final data = DataStorage.getAll()[index];
+                final notes = data.notes;
+                final consumption = calculateFuelConsumption(data);
+                return ListTile(
+                  title: Text(DateFormat('yyyy-MM-dd').format(data.dateTime)),
+                  subtitle: Text('Consumption: $consumption litres/100km\n$notes'),
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete),
+                    onPressed: () {
+                      // Remove the data from the list
+                      DataStorage.removeById(data.id);
+                      setState(() {});
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String calculateFuelConsumption(Data data) {
+    double distance = data.tachometerEnd - data.tachometerStart;
+
+    if (distance <= 0) {
+      return "0.0";
+    }
+
+    return format((data.fuelAmount / distance) * 100);
+  }
+
+  String format(double n) {
+    return n.toStringAsFixed(n.truncateToDouble() == n ? 0 : 2);
+  }
+}
+
+class MyForm extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController vehicleTachometerStart;
+  final TextEditingController vehicleTachometerEnd;
+  final TextEditingController fuelAmount;
+  final TextEditingController pricePerLitre;
+  final TextEditingController notes;
+  final VoidCallback submitForm;
+
+  const MyForm({
+    super.key,
+    required this.formKey,
+    required this.vehicleTachometerStart,
+    required this.vehicleTachometerEnd,
+    required this.fuelAmount,
+    required this.pricePerLitre,
+    required this.notes,
+    required this.submitForm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: formKey,
+      child: Column(
+        children: [
+          TextFormField(
+            controller: vehicleTachometerStart,
+            decoration: InputDecoration(labelText: 'Tachometer start'),
+            keyboardType: TextInputType.number,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+(\.\d+)?$')),
+            ],
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a number';
+              }
+              return null;
+            },
+          ),
+          TextFormField(
+            controller: vehicleTachometerEnd,
+            decoration: InputDecoration(labelText: 'Tachometer end'),
+            keyboardType: TextInputType.number,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+(\.\d+)?$')),
+            ],
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a number';
+              }
+              return null;
+            },
+          ),
+          TextFormField(
+            controller: fuelAmount,
+            decoration: InputDecoration(labelText: 'Fuel amount'),
+            keyboardType: TextInputType.number,
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp('[0-9]')),
+            ],
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a number';
+              }
+              return null;
+            },
+          ),
+          TextFormField(
+            controller: pricePerLitre,
+            decoration: InputDecoration(labelText: 'Price per liter'),
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a number';
+              }
+              return null;
+            },
+          ),
+          TextFormField(
+            controller: notes,
+            decoration: InputDecoration(labelText: 'Notes'),
+            keyboardType: TextInputType.text,
+          ),
+
+          Padding(padding: EdgeInsets.symmetric(vertical: 25.0)),
+          const DatePicker(),
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 16.0),
+            child: ElevatedButton(
+              onPressed: submitForm,
+              child: Text('Add new record!'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DatePicker extends StatefulWidget {
+  const DatePicker({super.key});
+
+  @override
+  State<DatePicker> createState() => _DatePickerState();
+}
+
+class _DatePickerState extends State<DatePicker> {
+  static DateTime? selectedDate;
+
+  Future<void> _selectDate() async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2021, 7, 25),
+      firstDate: DateTime(2021),
+      lastDate: DateTime(2022),
+    );
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      selectedDate = pickedDate;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start, // Aligns to the left
+      children: <Widget>[
+        Center(child: Text("Refuel date:", textScaler: TextScaler.linear(1.25), style: TextStyle(fontWeight: FontWeight.bold),)),
+        SizedBox(height: 20), // Adds spacing between the text and button
+        Center(child:
+          ElevatedButton(
+            onPressed: _selectDate,
+            child: Text(selectedDate != null
+                ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                : 'Select date!'
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+          )
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ],
     );
   }
 }

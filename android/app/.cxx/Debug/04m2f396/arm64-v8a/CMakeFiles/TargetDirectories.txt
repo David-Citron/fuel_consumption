@@ -1,0 +1,2 @@
+C:/dev/Flutter/fuel_consumption/android/app/.cxx/Debug/04m2f396/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/dev/Flutter/fuel_consumption/android/app/.cxx/Debug/04m2f396/arm64-v8a/CMakeFiles/rebuild_cache.dir
